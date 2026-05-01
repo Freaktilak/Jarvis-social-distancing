@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JARVIS — Proximity Analysis System</title>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&family=Orbitron:wght@400;600;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --cyan:  #00d4ff;
+    --gold:  #ffb300;
+    --red:   #ff2244;
+    --green: #00ff88;
+    --dark:  #020c14;
+    --panel: rgba(0,20,35,0.88);
+    --border:rgba(0,212,255,0.22);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    background: var(--dark);
+    color: var(--cyan);
+    font-family: 'Rajdhani', sans-serif;
+    height: 100vh;
+    overflow: hidden;
+    cursor: crosshair;
+  }
+
+  /* Grid background */
+  body::before {
+    content:''; position:fixed; inset:0; z-index:0;
+    background-image:
+      linear-gradient(rgba(0,212,255,0.03) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(0,212,255,0.03) 1px,transparent 1px);
+    background-size:44px 44px;
+    pointer-events:none;
+  }
+  /* Scanlines */
+  body::after {
+    content:''; position:fixed; inset:0; z-index:1; pointer-events:none;
+    background: repeating-linear-gradient(
+      0deg,transparent,transparent 2px,
+      rgba(0,0,0,0.06) 2px,rgba(0,0,0,0.06) 4px);
+  }
+
+  #app {
+    position:relative; z-index:2;
+    display:grid;
+    grid-template-columns:260px 1fr 260px;
+    grid-template-rows:54px 1fr 46px;
+    height:100vh;
+  }
+
+  /* ── TOP BAR ── */
+  #topbar {
+    grid-column:1/-1;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:0 22px;
+    background:rgba(0,8,18,0.95);
+    border-bottom:1px solid var(--border);
+    box-shadow:0 2px 24px rgba(0,212,255,0.12);
+  }
+
+  .brand { display:flex; align-items:center; gap:14px; }
+
+  .arc {
+    width:28px; height:28px; border-radius:50%;
+    border:2px solid var(--cyan);
+    position:relative;
+    box-shadow:0 0 14px rgba(0,212,255,0.5);
+    animation:arc-pulse 2s ease-in-out infinite;
+  }
+  .arc::before {
+    content:''; position:absolute; inset:5px; border-radius:50%;
+    background:var(--cyan); opacity:0.85;
+    animation:arc-inner 2s ease-in-out infinite;
+  }
+  @keyframes arc-pulse {
+    0%,100%{box-shadow:0 0 10px rgba(0,212,255,0.4),0 0 24px rgba(0,212,255,0.2);}
+    50%    {box-shadow:0 0 20px rgba(0,212,255,0.7),0 0 48px rgba(0,212,255,0.4);}
+  }
+  @keyframes arc-inner {
+    0%,100%{opacity:0.85;} 50%{opacity:1;}
+  }
+
+  .brand-name {
+    font-family:'Orbitron',monospace;
+    font-size:15px; font-weight:700;
+    color:var(--cyan); letter-spacing:4px;
+    text-shadow:0 0 20px rgba(0,212,255,0.5);
+  }
+  .brand-sub {
+    font-family:'Share Tech Mono',monospace;
+    font-size:9px; color:rgba(0,212,255,0.45); letter-spacing:2px;
+  }
+
+  .top-stats {
+    display:flex; gap:28px;
+    font-family:'Share Tech Mono',monospace; font-size:12px;
+    color:rgba(0,212,255,0.6);
+  }
+  .top-stats .v { color:var(--cyan); }
+
+  .top-right {
+    display:flex; align-items:center; gap:10px;
+    font-family:'Orbitron',monospace; font-size:10px; letter-spacing:2px;
+  }
+  .dot {
+    width:8px; height:8px; border-radius:50%;
+    background:var(--green); box-shadow:0 0 8px var(--green);
+    animation:blink 1.5s ease-in-out infinite;
+  }
+  @keyframes blink{0%,100%{opacity:1;}50%{opacity:0.25;}}
+  #sys-status { color:var(--green); }
+
+  /* ── LEFT PANEL ── */
+  #left {
+    background:var(--panel);
+    border-right:1px solid var(--border);
+    padding:18px 14px;
+    display:flex; flex-direction:column; gap:16px;
+    overflow-y:auto;
+  }
+
+  .pane {
+    border:1px solid var(--border);
+    padding:13px 12px;
+    background:rgba(0,212,255,0.02);
+    position:relative;
+  }
+  .pane::before {
+    content:''; position:absolute; top:-1px; left:10px;
+    width:36px; height:2px; background:var(--gold);
+  }
+  .pane-title {
+    font-family:'Orbitron',monospace; font-size:9px;
+    letter-spacing:3px; color:var(--gold); margin-bottom:13px;
+  }
+
+  .big-num {
+    font-family:'Orbitron',monospace;
+    font-size:54px; font-weight:900; text-align:center; line-height:1;
+    color:var(--cyan); text-shadow:0 0 28px rgba(0,212,255,0.5);
+    transition:color 0.3s;
+  }
+  .big-num.warn { color:var(--red); text-shadow:0 0 28px rgba(255,34,68,0.7); }
+  .big-lbl {
+    text-align:center; font-size:10px; letter-spacing:3px;
+    color:rgba(0,212,255,0.45); margin-top:4px;
+  }
+
+  .row {
+    display:flex; justify-content:space-between; align-items:center;
+    padding:5px 0; border-bottom:1px solid rgba(0,212,255,0.07);
+    font-family:'Share Tech Mono',monospace; font-size:12px;
+  }
+  .row:last-child{border-bottom:none;}
+  .rl{color:rgba(0,212,255,0.55);font-size:10px;letter-spacing:1px;}
+  .rv{color:var(--cyan);}
+  .rv.r{color:var(--red);text-shadow:0 0 8px var(--red);}
+  .rv.g{color:var(--green);}
+  .rv.o{color:var(--gold);}
+
+  .bar-wrap{margin-top:10px;}
+  .bar-head{
+    display:flex;justify-content:space-between;
+    font-family:'Share Tech Mono',monospace;font-size:10px;
+    color:rgba(0,212,255,0.5);margin-bottom:5px;
+  }
+  .bar-bg{height:5px;background:rgba(0,212,255,0.1);border:1px solid var(--border);overflow:hidden;}
+  .bar-fill{
+    height:100%;
+    background:linear-gradient(90deg,var(--green),var(--gold),var(--red));
+    transition:width 0.5s ease; width:0%;
+  }
+
+  /* Log */
+  .log{display:flex;flex-direction:column;gap:3px;max-height:130px;overflow-y:auto;}
+  .log-item{
+    font-family:'Share Tech Mono',monospace;font-size:10px;
+    padding:3px 6px;border-left:2px solid var(--red);
+    background:rgba(255,34,68,0.05);color:rgba(255,180,180,0.85);
+    animation:li 0.3s ease;
+  }
+  .log-item.i{border-color:var(--cyan);background:rgba(0,212,255,0.04);color:rgba(150,220,255,0.8);}
+  @keyframes li{from{opacity:0;transform:translateX(-6px);}to{opacity:1;transform:none;}}
+
+  /* ── CENTER ── */
+  #center{
+    position:relative; overflow:hidden;
+    background:#000; display:flex; align-items:center; justify-content:center;
+  }
+  #feed{width:100%;height:100%;object-fit:contain;display:block;}
+
+  .corner{position:absolute;width:26px;height:26px;z-index:10;pointer-events:none;}
+  .corner.tl{top:10px;left:10px;border-top:2px solid var(--cyan);border-left:2px solid var(--cyan);}
+  .corner.tr{top:10px;right:10px;border-top:2px solid var(--cyan);border-right:2px solid var(--cyan);}
+  .corner.bl{bottom:10px;left:10px;border-bottom:2px solid var(--cyan);border-left:2px solid var(--cyan);}
+  .corner.br{bottom:10px;right:10px;border-bottom:2px solid var(--cyan);border-right:2px solid var(--cyan);}
+
+  .scanline{
+    position:absolute;left:0;right:0;height:2px;z-index:10;pointer-events:none;
+    background:linear-gradient(90deg,transparent,rgba(0,212,255,0.6),transparent);
+    animation:scan 4s linear infinite;
+  }
+  @keyframes scan{0%{top:0%;}100%{top:100%;}}
+
+  #alert-banner{
+    position:absolute;top:0;left:0;right:0;
+    display:none;align-items:center;justify-content:center;
+    z-index:20;padding:10px 0;
+    background:rgba(180,0,0,0.18);
+    border-bottom:1px solid var(--red);
+    animation:ablink 0.7s ease-in-out infinite alternate;
+  }
+  #alert-banner.on{display:flex;}
+  @keyframes ablink{
+    from{box-shadow:0 4px 20px rgba(255,34,68,0.3);}
+    to  {box-shadow:0 4px 40px rgba(255,34,68,0.7);}
+  }
+  .alert-txt{
+    font-family:'Orbitron',monospace;font-size:18px;font-weight:700;
+    color:var(--red);letter-spacing:4px;text-shadow:0 0 16px var(--red);
+  }
+
+  /* ── RIGHT PANEL ── */
+  #right{
+    background:var(--panel);
+    border-left:1px solid var(--border);
+    padding:18px 14px;
+    display:flex;flex-direction:column;gap:16px;
+    overflow-y:auto;
+  }
+
+  .person-card{
+    border:1px solid var(--border);padding:11px;
+    background:rgba(0,212,255,0.02);
+    transition:border-color 0.3s, box-shadow 0.3s;
+    margin-bottom:6px;
+  }
+  .person-card.v{
+    border-color:var(--red);background:rgba(255,34,68,0.05);
+    box-shadow:0 0 10px rgba(255,34,68,0.2);
+  }
+  .pid{
+    font-family:'Orbitron',monospace;font-size:10px;font-weight:700;
+    letter-spacing:2px;color:var(--gold);margin-bottom:6px;
+  }
+  .ptag{
+    display:inline-block;padding:2px 8px;margin-bottom:5px;
+    font-family:'Share Tech Mono',monospace;font-size:11px;
+  }
+  .ptag.s{color:var(--green);border:1px solid var(--green);background:rgba(0,255,136,0.07);}
+  .ptag.d{color:var(--red);border:1px solid var(--red);background:rgba(255,34,68,0.09);}
+
+  .viol-card{
+    padding:8px 10px;border:1px solid rgba(255,34,68,0.3);
+    background:rgba(255,34,68,0.05);margin-bottom:5px;
+    font-family:'Share Tech Mono',monospace;font-size:11px;
+    color:rgba(255,160,160,0.9);
+  }
+  .vdist{font-family:'Orbitron',monospace;font-size:16px;color:var(--red);font-weight:700;}
+
+  /* ── BOTTOM BAR ── */
+  #bottombar{
+    grid-column:1/-1;
+    display:flex;align-items:center;justify-content:space-between;
+    padding:0 22px;
+    background:rgba(0,8,18,0.95);
+    border-top:1px solid var(--border);
+    font-family:'Share Tech Mono',monospace;font-size:11px;
+    color:rgba(0,212,255,0.45);letter-spacing:1px;
+  }
+  .bitem{display:flex;align-items:center;gap:8px;}
+  .bv{color:var(--cyan);}
+
+  input[type=range]{
+    -webkit-appearance:none;width:90px;height:3px;
+    background:rgba(0,212,255,0.18);border-radius:2px;outline:none;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;width:11px;height:11px;border-radius:50%;
+    background:var(--cyan);cursor:pointer;box-shadow:0 0 5px var(--cyan);
+  }
+
+  ::-webkit-scrollbar{width:3px;}
+  ::-webkit-scrollbar-thumb{background:rgba(0,212,255,0.18);border-radius:2px;}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- TOP BAR -->
+  <div id="topbar">
+    <div class="brand">
+      <div class="arc"></div>
+      <div>
+        <div class="brand-name">J.A.R.V.I.S</div>
+        <div class="brand-sub">PROXIMITY ANALYSIS SYSTEM // STARK INDUSTRIES</div>
+      </div>
+    </div>
+    <div class="top-stats">
+      <span>TIME <span class="v" id="clock">--:--:--</span></span>
+      <span>FRAME <span class="v" id="fcount">000000</span></span>
+      <span>FPS <span class="v" id="fps-display">0.0</span></span>
+      <span>ENGINE <span class="v">YOLOv8-POSE</span></span>
+    </div>
+    <div class="top-right">
+      <div class="dot" id="dot"></div>
+      <span id="sys-status">SYSTEM ONLINE</span>
+    </div>
+  </div>
+
+  <!-- LEFT PANEL -->
+  <div id="left">
+
+    <div class="pane">
+      <div class="pane-title">Personnel Status</div>
+      <div class="big-num" id="pcount">0</div>
+      <div class="big-lbl">TARGETS ACQUIRED</div>
+    </div>
+
+    <div class="pane">
+      <div class="pane-title">Threat Assessment</div>
+      <div class="row"><span class="rl">VIOLATIONS</span><span class="rv r" id="vcount">0</span></div>
+      <div class="row"><span class="rl">THRESHOLD</span><span class="rv" id="thresh-display">150px</span></div>
+      <div class="row"><span class="rl">LAST EVENT</span><span class="rv" id="last-evt">—</span></div>
+      <div class="row"><span class="rl">TOTAL EVENTS</span><span class="rv o" id="total-events">0</span></div>
+      <div class="bar-wrap">
+        <div class="bar-head"><span>THREAT LEVEL</span><span id="threat-pct">0%</span></div>
+        <div class="bar-bg"><div class="bar-fill" id="bar-fill"></div></div>
+      </div>
+    </div>
+
+    <div class="pane">
+      <div class="pane-title">System Info</div>
+      <div class="row"><span class="rl">STREAM</span><span class="rv g">ACTIVE</span></div>
+      <div class="row"><span class="rl">PORT</span><span class="rv">8080</span></div>
+      <div class="row"><span class="rl">UPTIME</span><span class="rv" id="uptime">00:00:00</span></div>
+      <div class="row"><span class="rl">MODEL</span><span class="rv">YOLOv8n</span></div>
+    </div>
+
+    <div class="pane">
+      <div class="pane-title">Event Log</div>
+      <div class="log" id="log"></div>
+    </div>
+
+  </div>
+
+  <!-- CENTER VIDEO -->
+  <div id="center">
+    <div class="corner tl"></div>
+    <div class="corner tr"></div>
+    <div class="corner bl"></div>
+    <div class="corner br"></div>
+    <div class="scanline"></div>
+
+    <div id="alert-banner">
+      <span class="alert-txt">⚠&nbsp;&nbsp;PROXIMITY BREACH DETECTED&nbsp;&nbsp;⚠</span>
+    </div>
+
+    <img id="feed" src="http://localhost:8080/stream" alt="JARVIS Camera Feed">
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div id="right">
+
+    <div class="pane">
+      <div class="pane-title">Target Tracking</div>
+      <div id="person-cards">
+        <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:rgba(0,212,255,0.28);text-align:center;padding:18px 0">
+          AWAITING TARGETS...
+        </div>
+      </div>
+    </div>
+
+    <div class="pane">
+      <div class="pane-title">Violation Details</div>
+      <div id="viol-details">
+        <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:rgba(0,212,255,0.28);text-align:center;padding:12px 0">
+          NO VIOLATIONS
+        </div>
+      </div>
+    </div>
+
+    <div class="pane">
+      <div class="pane-title">Keypoint Confidence</div>
+      <div id="kp-bars" style="display:flex;flex-direction:column;gap:4px;"></div>
+    </div>
+
+  </div>
+
+  <!-- BOTTOM BAR -->
+  <div id="bottombar">
+    <div class="bitem">
+      <span>STARK INDUSTRIES AI PLATFORM</span>
+      <span class="bv">// IRON MAN PROXIMITY DETECTION v1.0</span>
+    </div>
+    <div class="bitem">
+      <span>THRESHOLD:</span>
+      <input type="range" id="slider" min="50" max="400" value="150">
+      <span class="bv" id="slider-val">150px</span>
+    </div>
+    <div class="bitem">
+      <span>CLASSIFIED //</span>
+      <span class="bv">AVENGERS INITIATIVE</span>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const STATUS_URL = 'http://localhost:8080/status';
+const THRESH_URL = 'http://localhost:8080/set_threshold/';
+const KPNAMES = [
+  'nose','left eye','right eye','left ear','right ear',
+  'left shoulder','right shoulder','left elbow','right elbow',
+  'left wrist','right wrist','left hip','right hip',
+  'left knee','right knee','left ankle','right ankle'
+];
+
+let totalEvents  = 0;
+let lastEvtTime  = null;
+let startTime    = Date.now();
+let lastLog      = '';
+let alertHoldTimer = null;   // keeps alert visible for min 3 seconds
+
+// ── Clock & Uptime ─────────────────────────────────────────
+setInterval(() => {
+  document.getElementById('clock').textContent =
+    new Date().toTimeString().slice(0,8);
+  const s = Math.floor((Date.now()-startTime)/1000);
+  document.getElementById('uptime').textContent =
+    `${String(Math.floor(s/3600)).padStart(2,'0')}:${String(Math.floor((s%3600)/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
+}, 1000);
+
+// ── Poll /status every 200ms ──────────────────────────────
+async function poll() {
+  try {
+    const res  = await fetch(STATUS_URL);
+    const data = await res.json();
+    update(data);
+  } catch(e) {
+    document.getElementById('sys-status').textContent = 'RECONNECTING...';
+    document.getElementById('sys-status').style.color = 'var(--red)';
+    document.getElementById('dot').style.background   = 'var(--red)';
+  }
+  setTimeout(poll, 200);
+}
+
+function update(data) {
+  const persons    = data.persons    || [];
+  const violations = data.violations || [];
+
+  document.getElementById('sys-status').textContent = 'SYSTEM ONLINE';
+  document.getElementById('sys-status').style.color = 'var(--green)';
+  document.getElementById('dot').style.background   = 'var(--green)';
+
+  // Counts
+  const pc = document.getElementById('pcount');
+  pc.textContent = persons.length;
+  pc.className   = 'big-num' + (violations.length > 0 ? ' warn' : '');
+
+  document.getElementById('vcount').textContent      = violations.length;
+  document.getElementById('fcount').textContent      = String(data.frame_count||0).padStart(6,'0');
+  document.getElementById('fps-display').textContent = data.fps || '0.0';
+  document.getElementById('thresh-display').textContent = (data.threshold||150) + 'px';
+
+  // Threat bar
+  const threat = Math.min(100, violations.length*45 + persons.length*8);
+  document.getElementById('bar-fill').style.width  = threat + '%';
+  document.getElementById('threat-pct').textContent = threat + '%';
+
+  // Alert banner — stays visible for at least 3 seconds
+  if (violations.length > 0) {
+    document.getElementById('alert-banner').classList.add('on');
+    totalEvents++;
+    lastEvtTime = new Date().toTimeString().slice(0,8);
+    addLog(`BREACH — pair distance ${Math.round(violations[0][2]||0)}px — ${lastEvtTime}`);
+    // Reset the hold timer on every new violation
+    if (alertHoldTimer) clearTimeout(alertHoldTimer);
+    alertHoldTimer = setTimeout(() => {
+      document.getElementById('alert-banner').classList.remove('on');
+      alertHoldTimer = null;
+    }, 3000);
+  }
+  // Only remove alert if hold timer has already expired
+
+  document.getElementById('last-evt').textContent   = lastEvtTime || '—';
+  document.getElementById('total-events').textContent = totalEvents;
+
+  // Person cards
+  renderPersonCards(persons, violations);
+
+  // Violation details
+  renderViolations(violations);
+
+  // Keypoints
+  if (persons.length > 0 && persons[0].keypoints) {
+    renderKpBars(persons[0].keypoints);
+  }
+}
+
+function renderPersonCards(persons, violations) {
+  const c   = document.getElementById('person-cards');
+  const vIds = new Set(violations.flatMap(v => [v[0],v[1]]));
+  if (!persons.length) {
+    c.innerHTML = `<div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:rgba(0,212,255,0.28);text-align:center;padding:18px 0">AWAITING TARGETS...</div>`;
+    return;
+  }
+  c.innerHTML = persons.map((p,i) => {
+    const isV = vIds.has(i);
+    const hip = p.hip_center ? `${Math.round(p.hip_center[0])}, ${Math.round(p.hip_center[1])}` : '—';
+    return `
+      <div class="person-card ${isV?'v':''}">
+        <div class="pid">TARGET — ID:${String(i).padStart(2,'0')}</div>
+        <div class="ptag ${isV?'d':'s'}">${isV?'⚠ BREACH':'✓ SAFE'}</div>
+        <div class="row"><span class="rl">HIP CENTER</span><span class="rv">${hip}</span></div>
+      </div>`;
+  }).join('');
+}
+
+function renderViolations(violations) {
+  const c = document.getElementById('viol-details');
+  if (!violations.length) {
+    c.innerHTML = `<div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:rgba(0,212,255,0.28);text-align:center;padding:12px 0">NO VIOLATIONS</div>`;
+    return;
+  }
+  c.innerHTML = violations.map(v => `
+    <div class="viol-card">
+      <div>PAIR: ID:${v[0]} ↔ ID:${v[1]}</div>
+      <div class="vdist">${Math.round(v[2]||0)}px</div>
+      <div style="font-size:10px;color:rgba(255,100,100,0.55);margin-top:2px">BELOW SAFE THRESHOLD</div>
+    </div>`).join('');
+}
+
+function renderKpBars(kps) {
+  const c = document.getElementById('kp-bars');
+  c.innerHTML = kps.map((kp,i) => {
+    const conf = Math.round((kp.confidence||0)*100);
+    const col  = conf>70?'var(--cyan)':conf>40?'var(--gold)':'var(--red)';
+    return `
+      <div style="display:grid;grid-template-columns:88px 1fr 30px;align-items:center;gap:6px;
+                  font-family:'Share Tech Mono',monospace;font-size:10px;color:rgba(0,212,255,0.6);">
+        <span>${KPNAMES[i]||''}</span>
+        <div style="height:3px;background:rgba(0,212,255,0.1);border-radius:2px;overflow:hidden;">
+          <div style="height:100%;width:${conf}%;background:${col};border-radius:2px;transition:width 0.4s;"></div>
+        </div>
+        <span style="text-align:right;color:${col}">${conf}%</span>
+      </div>`;
+  }).join('');
+}
+
+function addLog(msg, type='') {
+  if (msg === lastLog) return;
+  lastLog = msg;
+  const list = document.getElementById('log');
+  const div  = document.createElement('div');
+  div.className = 'log-item ' + type;
+  div.textContent = msg;
+  list.prepend(div);
+  while (list.children.length > 25) list.lastChild.remove();
+}
+
+// ── Threshold slider ───────────────────────────────────────
+const slider = document.getElementById('slider');
+slider.addEventListener('change', () => {
+  const v = slider.value;
+  document.getElementById('slider-val').textContent = v + 'px';
+  fetch(THRESH_URL + v).catch(()=>{});
+});
+slider.addEventListener('input', () => {
+  document.getElementById('slider-val').textContent = slider.value + 'px';
+});
+
+// ── Start polling ──────────────────────────────────────────
+addLog('JARVIS system initialized', 'i');
+addLog('Connecting to camera feed...', 'i');
+poll();
+</script>
+</body>
+</html>
