@@ -31,14 +31,14 @@ Real-time **Social Distancing Detection** running on **NVIDIA Jetson Nano** usin
 ### ✅ Normal — No Violation Detected
 *Two persons detected, distance above threshold — cyan skeletons, ALL CLEAR status*
 
-![No Violation](results/image01.png)
+![No Violation](Freaktilak/Jarvis-social-distancing/Results/image01.png)
 
 ---
 
 ### ⚠️ Anomaly Detected — Proximity Breach
 *Two persons too close — red skeletons, PROXIMITY BREACH DETECTED banner, violation details shown*
 
-![Violation Detected](results/image02.png)
+![Violation Detected](Freaktilak/Jarvis-social-distancing/Results/image02.png)
 
 ---
 
